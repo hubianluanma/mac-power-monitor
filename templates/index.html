@@ -1,0 +1,394 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Mac 功耗监测 — Power Monitor</title>
+  <!-- Chart.js CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <style>
+    :root {
+      --bg: #0f1117;
+      --bg-card: #181b23;
+      --bg-elev: #1f232e;
+      --border: #2a2f3a;
+      --text: #e6e8ec;
+      --text-dim: #8a8f9b;
+      --accent: #4f9eff;
+      --accent-dim: #2c5d99;
+      --good: #5fcc8b;
+      --warn: #f0b656;
+      --bad: #e85f5f;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, "PingFang SC", "Helvetica Neue", Arial, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      padding: 20px;
+      min-height: 100vh;
+      -webkit-font-smoothing: antialiased;
+    }
+    .container { max-width: 1280px; margin: 0 auto; }
+
+    /* Header */
+    header {
+      display: flex; justify-content: space-between; align-items: center;
+      padding: 16px 0 24px;
+      border-bottom: 1px solid var(--border);
+      margin-bottom: 24px;
+      flex-wrap: wrap; gap: 12px;
+    }
+    h1 { font-size: 20px; font-weight: 600; }
+    h1 .badge {
+      font-size: 11px; padding: 2px 8px; border-radius: 4px;
+      background: var(--accent-dim); color: white; margin-left: 8px;
+      vertical-align: middle;
+    }
+    .controls { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+    .controls label { font-size: 13px; color: var(--text-dim); }
+    .controls select, .controls button {
+      background: var(--bg-elev); color: var(--text);
+      border: 1px solid var(--border); border-radius: 6px;
+      padding: 6px 10px; font-size: 13px; cursor: pointer;
+      font-family: inherit;
+    }
+    .controls button:hover { border-color: var(--accent); }
+    .live-dot {
+      width: 8px; height: 8px; border-radius: 50%; background: var(--good);
+      display: inline-block; margin-right: 6px;
+      box-shadow: 0 0 8px var(--good);
+      animation: pulse 2s infinite;
+    }
+    @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.4; } }
+
+    /* KPI Grid */
+    .kpi-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 16px; margin-bottom: 24px;
+    }
+    .kpi {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 16px 18px;
+    }
+    .kpi .label { font-size: 12px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.5px; }
+    .kpi .value { font-size: 26px; font-weight: 600; margin-top: 6px; }
+    .kpi .unit { font-size: 14px; color: var(--text-dim); margin-left: 4px; font-weight: 400; }
+    .kpi .sub { font-size: 11px; color: var(--text-dim); margin-top: 4px; }
+    .kpi.primary { border-color: var(--accent); }
+    .kpi.primary .value { color: var(--accent); }
+
+    /* Cards */
+    .card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 18px 20px;
+      margin-bottom: 16px;
+    }
+    .card h2 {
+      font-size: 14px; font-weight: 600; color: var(--text);
+      margin-bottom: 14px;
+      display: flex; justify-content: space-between; align-items: center;
+    }
+    .card h2 .meta { font-size: 11px; color: var(--text-dim); font-weight: 400; }
+
+    .grid-2 {
+      display: grid; grid-template-columns: 1fr 1fr; gap: 16px;
+    }
+    @media (max-width: 768px) {
+      .grid-2 { grid-template-columns: 1fr; }
+    }
+
+    /* Chart container */
+    .chart-wrap { position: relative; height: 240px; }
+
+    /* Tier breakdown */
+    .tier-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    .tier-table th, .tier-table td {
+      padding: 8px 6px; text-align: right;
+      border-bottom: 1px solid var(--border);
+    }
+    .tier-table th { color: var(--text-dim); font-weight: 500; font-size: 11px; text-transform: uppercase; }
+    .tier-table td:first-child, .tier-table th:first-child { text-align: left; }
+    .tier-active { color: var(--accent); font-weight: 600; }
+
+    .footer {
+      text-align: center; color: var(--text-dim); font-size: 11px;
+      padding: 24px 0; margin-top: 16px;
+    }
+
+    /* Tooltip */
+    .chart-tooltip {
+      background: var(--bg-elev) !important;
+      border: 1px solid var(--border) !important;
+      border-radius: 6px !important;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>
+        ⚡ Mac 功耗监测
+        <span class="badge">M4 · 实时</span>
+      </h1>
+      <div class="controls">
+        <span class="live-dot"></span><span id="status">连接中…</span>
+        <label>电价：</label>
+        <select id="city-select">
+          <option value="beijing">北京</option>
+          <option value="shanghai">上海</option>
+          <option value="guangzhou">广州</option>
+          <option value="shenzhen">深圳</option>
+          <option value="flat">统一价 (0.6元)</option>
+        </select>
+        <button id="refresh">🔄 刷新</button>
+      </div>
+    </header>
+
+    <!-- KPI Cards -->
+    <div class="kpi-grid">
+      <div class="kpi primary">
+        <div class="label">当前功耗</div>
+        <div class="value"><span id="kpi-current">—</span><span class="unit">W</span></div>
+        <div class="sub" id="kpi-current-time">—</div>
+      </div>
+      <div class="kpi">
+        <div class="label">今日耗电</div>
+        <div class="value"><span id="kpi-today-kwh">—</span><span class="unit">kWh</span></div>
+        <div class="sub">≈ <span id="kpi-today-cost">—</span> 元</div>
+      </div>
+      <div class="kpi">
+        <div class="label">今日平均</div>
+        <div class="value"><span id="kpi-today-avg">—</span><span class="unit">W</span></div>
+        <div class="sub"><span id="kpi-today-samples">—</span> 个采样点</div>
+      </div>
+      <div class="kpi">
+        <div class="label">本月估算</div>
+        <div class="value"><span id="kpi-month-kwh">—</span><span class="unit">kWh</span></div>
+        <div class="sub">≈ <span id="kpi-month-cost">—</span> 元</div>
+      </div>
+      <div class="kpi">
+        <div class="label">年均电价</div>
+        <div class="value"><span id="kpi-avg-price">—</span><span class="unit">元/kWh</span></div>
+        <div class="sub" id="kpi-city-name">—</div>
+      </div>
+      <div class="kpi">
+        <div class="label">系统估算开销</div>
+        <div class="value"><span id="kpi-bias">—</span><span class="unit">W</span></div>
+        <div class="sub">SoC + 屏幕 + 外设</div>
+      </div>
+    </div>
+
+    <!-- Main Charts -->
+    <div class="card">
+      <h2>实时功率曲线（最近 24 小时）
+        <span class="meta" id="chart-meta-1">—</span>
+      </h2>
+      <div class="chart-wrap"><canvas id="chart-realtime"></canvas></div>
+    </div>
+
+    <div class="grid-2">
+      <div class="card">
+        <h2>今日按小时分布
+          <span class="meta">平均 / 最大</span>
+        </h2>
+        <div class="chart-wrap"><canvas id="chart-hourly"></canvas></div>
+      </div>
+      <div class="card">
+        <h2>近 7 日趋势
+          <span class="meta">日均功率 (W)</span>
+        </h2>
+        <div class="chart-wrap"><canvas id="chart-weekly"></canvas></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>阶梯电价拆解（按本年度累计用电）
+        <span class="meta" id="tier-meta">—</span>
+      </h2>
+      <table class="tier-table">
+        <thead>
+          <tr>
+            <th>档位</th>
+            <th>范围 (kWh)</th>
+            <th>本年累计 (kWh)</th>
+            <th>单价 (元)</th>
+            <th>本档费用 (元)</th>
+          </tr>
+        </thead>
+        <tbody id="tier-tbody"></tbody>
+      </table>
+    </div>
+
+    <div class="footer">
+      数据每 60 秒采样一次 · powermetrics (M4 SoC) + 7W 系统估算 · 最后更新 <span id="updated-at">—</span>
+    </div>
+  </div>
+
+  <script>
+    const SCRIPT_NAME = {{ script_prefix|tojson }};
+    const API = (path, params = {}) => {
+      const qs = new URLSearchParams(params).toString();
+      return SCRIPT_NAME + path + (qs ? '?' + qs : '');
+    };
+
+    let chartRealtime, chartHourly, chartWeekly;
+    let currentCity = localStorage.getItem('power-city') || 'beijing';
+
+    // ============ Charts Init ============
+    function initCharts() {
+      const baseOpts = {
+        responsive: true, maintainAspectRatio: false,
+        interaction: { mode: 'index', intersect: false },
+        plugins: {
+          legend: { labels: { color: '#e6e8ec', font: { size: 11 } } },
+          tooltip: {
+            backgroundColor: '#1f232e', borderColor: '#2a2f3a', borderWidth: 1,
+            titleColor: '#e6e8ec', bodyColor: '#e6e8ec',
+          },
+        },
+        scales: {
+          x: { ticks: { color: '#8a8f9b', font: { size: 10 } }, grid: { color: '#2a2f3a' } },
+          y: { ticks: { color: '#8a8f9b', font: { size: 10 } }, grid: { color: '#2a2f3a' } },
+        },
+      };
+      chartRealtime = new Chart(document.getElementById('chart-realtime'), {
+        type: 'line',
+        data: { labels: [], datasets: [{
+          label: '整机功耗 (W)', data: [], borderColor: '#4f9eff',
+          backgroundColor: 'rgba(79,158,255,0.1)', fill: true,
+          pointRadius: 0, borderWidth: 1.5, tension: 0.2,
+        }]},
+        options: { ...baseOpts, scales: { ...baseOpts.scales, y: { ...baseOpts.scales.y, title: { display: true, text: 'W', color: '#8a8f9b' } } } },
+      });
+      chartHourly = new Chart(document.getElementById('chart-hourly'), {
+        type: 'bar',
+        data: { labels: Array.from({length:24}, (_,i) => i + '时'),
+                datasets: [
+                  { label: '平均 (W)', data: [], backgroundColor: '#4f9eff' },
+                  { label: '峰值 (W)', data: [], backgroundColor: '#f0b656' },
+                ]},
+        options: baseOpts,
+      });
+      chartWeekly = new Chart(document.getElementById('chart-weekly'), {
+        type: 'bar',
+        data: { labels: [], datasets: [{
+          label: '日均功率 (W)', data: [], backgroundColor: '#5fcc8b',
+        }]},
+        options: baseOpts,
+      });
+    }
+
+    // ============ Data Fetch ============
+    async function fetchSummary() {
+      const r = await fetch(API('/api/summary', { city: currentCity }));
+      if (!r.ok) throw new Error('API ' + r.status);
+      return r.json();
+    }
+    async function fetchSamples(hours = 24) {
+      const r = await fetch(API('/api/samples', { hours }));
+      return r.json();
+    }
+    async function fetchHourly() {
+      const r = await fetch(API('/api/hourly'));
+      return r.json();
+    }
+
+    // ============ Render ============
+    async function refresh() {
+      try {
+        const [summary, samples, hourly] = await Promise.all([
+          fetchSummary(), fetchSamples(24), fetchHourly()
+        ]);
+        document.getElementById('status').textContent = '已连接';
+
+        // KPIs
+        document.getElementById('kpi-current').textContent = summary.current_w.toFixed(2);
+        document.getElementById('kpi-current-time').textContent = summary.updated_at.slice(11);
+        document.getElementById('kpi-today-kwh').textContent = summary.today.kwh.toFixed(3);
+        document.getElementById('kpi-today-cost').textContent = summary.today.cost.toFixed(4);
+        document.getElementById('kpi-today-avg').textContent = summary.today.avg_w.toFixed(1);
+        document.getElementById('kpi-today-samples').textContent = summary.today.samples;
+        document.getElementById('kpi-month-kwh').textContent = summary.month.kwh_est.toFixed(1);
+        document.getElementById('kpi-month-cost').textContent = summary.month.cost_est.toFixed(2);
+        document.getElementById('kpi-avg-price').textContent = summary.year.tier.average_price.toFixed(4);
+        document.getElementById('kpi-city-name').textContent = summary.city_name + ' 阶梯电价';
+        document.getElementById('kpi-bias').textContent = summary.system_bias_w.toFixed(1);
+        document.getElementById('updated-at').textContent = summary.updated_at;
+
+        // Realtime chart (下采样到 ~150 点)
+        const stride = Math.max(1, Math.floor(samples.length / 150));
+        const sub = samples.filter((_, i) => i % stride === 0);
+        chartRealtime.data.labels = sub.map(s => s.ts.slice(11));
+        chartRealtime.data.datasets[0].data = sub.map(s => s.total_w);
+        chartRealtime.update('none');
+        document.getElementById('chart-meta-1').textContent = `${samples.length} 个点`;
+
+        // Hourly
+        const hours = Array.from({length:24}, (_,i) => String(i).padStart(2,'0'));
+        const avg = hours.map(h => hourly[h] ? hourly[h].avg_w : null);
+        const max = hours.map(h => hourly[h] ? hourly[h].max_w : null);
+        chartHourly.data.datasets[0].data = avg;
+        chartHourly.data.datasets[1].data = max;
+        chartHourly.update('none');
+
+        // Weekly
+        chartWeekly.data.labels = summary.weekly_data.map(d => d.day.slice(5));
+        chartWeekly.data.datasets[0].data = summary.weekly_data.map(d => d.avg_w);
+        chartWeekly.update('none');
+
+        // Tier table
+        const tier = summary.year.tier;
+        const yearKwh = summary.year.kwh_est;
+        const allCities = await (await fetch(API('/api/cities'))).json();
+        const tiers = allCities[currentCity].tiers;
+        const tbody = document.getElementById('tier-tbody');
+        tbody.innerHTML = '';
+        let consumed = 0;
+        tier.breakdown.forEach((b, i) => {
+          const t = tiers[i];
+          const rangeStart = consumed;
+          const rangeEnd = t.limit === null ? '∞' : t.limit;
+          const inThisTier = yearKwh > rangeStart && (t.limit === null || yearKwh <= t.limit);
+          consumed = t.limit === null ? consumed : consumed + b.kwh;
+          const tr = document.createElement('tr');
+          if (inThisTier) tr.className = 'tier-active';
+          tr.innerHTML = `
+            <td>第 ${b.tier} 档${inThisTier ? ' ← 当前' : ''}</td>
+            <td>${rangeStart} ~ ${rangeEnd}</td>
+            <td>${b.kwh.toFixed(2)}</td>
+            <td>${b.price.toFixed(4)}</td>
+            <td>${b.cost.toFixed(4)}</td>
+          `;
+          tbody.appendChild(tr);
+        });
+        document.getElementById('tier-meta').textContent =
+          `本年累计 ${yearKwh.toFixed(2)} kWh · 总费用 ≈ ${tier.total_cost.toFixed(2)} 元`;
+      } catch (e) {
+        document.getElementById('status').textContent = '连接失败: ' + e.message;
+        document.getElementById('status').style.color = '#e85f5f';
+      }
+    }
+
+    // ============ Boot ============
+    document.addEventListener('DOMContentLoaded', () => {
+      initCharts();
+      document.getElementById('city-select').value = currentCity;
+      document.getElementById('city-select').addEventListener('change', e => {
+        currentCity = e.target.value;
+        localStorage.setItem('power-city', currentCity);
+        refresh();
+      });
+      document.getElementById('refresh').addEventListener('click', refresh);
+      refresh();
+      // 每 60s 自动刷新
+      setInterval(refresh, 60000);
+    });
+  </script>
+</body>
+</html>
