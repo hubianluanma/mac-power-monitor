@@ -78,8 +78,13 @@
     .kpi .value { font-size: 26px; font-weight: 600; margin-top: 6px; }
     .kpi .unit { font-size: 14px; color: var(--text-dim); margin-left: 4px; font-weight: 400; }
     .kpi .sub { font-size: 11px; color: var(--text-dim); margin-top: 4px; }
-    .kpi.primary { border-color: var(--accent); }
-    .kpi.primary .value { color: var(--accent); }
+    .kpi.interactive { cursor: pointer; transition: border-color .2s, background .2s, transform .15s; }
+    .kpi.interactive:hover { border-color: var(--accent-dim); background: var(--bg-elev); }
+    .kpi.interactive:active { transform: scale(0.98); }
+    .kpi.selected { border-color: var(--accent); }
+    .kpi.selected .value { color: var(--accent); }
+    .kpi.disabled { cursor: not-allowed; opacity: 0.7; }
+    .kpi.disabled:hover { border-color: var(--border); background: var(--bg-card); }
 
     /* Cards */
     .card {
@@ -121,6 +126,19 @@
       padding: 24px 0; margin-top: 16px;
     }
 
+    /* Toast for "指标暂无曲线" feedback */
+    .toast {
+      position: fixed; left: 50%; bottom: 32px; transform: translateX(-50%) translateY(8px);
+      background: var(--bg-elev); color: var(--text);
+      border: 1px solid var(--border); border-radius: 8px;
+      padding: 10px 16px; font-size: 13px;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+      opacity: 0; pointer-events: none;
+      transition: opacity .2s, transform .2s;
+      z-index: 1000;
+    }
+    .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
     /* Tooltip */
     .chart-tooltip {
       background: var(--bg-elev) !important;
@@ -152,32 +170,32 @@
 
     <!-- KPI Cards -->
     <div class="kpi-grid">
-      <div class="kpi primary">
+      <div class="kpi interactive selected" data-kpi="power" role="button" tabindex="0" aria-label="切换到整机功耗曲线">
         <div class="label">当前功耗</div>
         <div class="value"><span id="kpi-current">—</span><span class="unit">W</span></div>
         <div class="sub" id="kpi-current-time">—</div>
       </div>
-      <div class="kpi">
+      <div class="kpi interactive" data-kpi="kwh_today" role="button" tabindex="0" aria-label="切换到今日耗电曲线">
         <div class="label">今日耗电</div>
         <div class="value"><span id="kpi-today-kwh">—</span><span class="unit">kWh</span></div>
         <div class="sub">≈ <span id="kpi-today-cost">—</span> 元</div>
       </div>
-      <div class="kpi">
+      <div class="kpi interactive" data-kpi="avg_w" role="button" tabindex="0" aria-label="切换到平均功率曲线">
         <div class="label">今日平均</div>
         <div class="value"><span id="kpi-today-avg">—</span><span class="unit">W</span></div>
         <div class="sub"><span id="kpi-today-samples">—</span> 个采样点</div>
       </div>
-      <div class="kpi">
+      <div class="kpi interactive" data-kpi="kwh_cum" role="button" tabindex="0" aria-label="切换到本月估算累计曲线">
         <div class="label">本月估算</div>
         <div class="value"><span id="kpi-month-kwh">—</span><span class="unit">kWh</span></div>
         <div class="sub">≈ <span id="kpi-month-cost">—</span> 元</div>
       </div>
-      <div class="kpi">
+      <div class="kpi disabled" data-kpi="avg_price" role="button" tabindex="0" aria-label="年均电价无时间序列" title="该指标暂无曲线">
         <div class="label">年均电价</div>
         <div class="value"><span id="kpi-avg-price">—</span><span class="unit">元/kWh</span></div>
         <div class="sub" id="kpi-city-name">—</div>
       </div>
-      <div class="kpi">
+      <div class="kpi disabled" data-kpi="bias" role="button" tabindex="0" aria-label="系统估算开销无时间序列" title="该指标暂无曲线">
         <div class="label">系统估算开销</div>
         <div class="value"><span id="kpi-bias">—</span><span class="unit">W</span></div>
         <div class="sub">SoC + 屏幕 + 外设</div>
@@ -230,6 +248,8 @@
     </div>
   </div>
 
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
   <script>
     const SCRIPT_NAME = {{ script_prefix|tojson }};
     const API = (path, params = {}) => {
@@ -239,6 +259,50 @@
 
     let chartRealtime, chartHourly, chartWeekly;
     let currentCity = localStorage.getItem('power-city') || 'beijing';
+
+    // ============ KPI ↔ Reatime Chart mapping ============
+    // 4 张可交互卡片各自映射到实时曲线的 series/color/label/unit。
+    // 曲线用同一个 chart(canvas)切换 series,避免新建/销毁 Chart 实例。
+    const KPI_META = {
+      power: {
+        label: '整机功耗 (W)',
+        unit: 'W',
+        color: '#4f9eff',
+        fillColor: 'rgba(79,158,255,0.10)',
+        extract: s => s.total_w,
+      },
+      kwh_today: {
+        // 累计到该时刻的今日度数(梯形积分) — 单调递增曲线,展示能耗累计
+        label: '今日累计耗电 (kWh)',
+        unit: 'kWh',
+        color: '#f0b656',
+        fillColor: 'rgba(240,182,86,0.10)',
+        extract: null,  // 在 renderRealtimeChart 里用全局 runningKwh 状态计算
+      },
+      avg_w: {
+        // 移动平均(取前后 5 个点),曲线更平滑,展示负载趋势
+        label: '5 点滑动平均 (W)',
+        unit: 'W',
+        color: '#5fcc8b',
+        fillColor: 'rgba(95,204,139,0.10)',
+        extract: null,  // 在 renderRealtimeChart 里单独算
+      },
+      kwh_cum: {
+        // 本月起累计度数(用 full samples 算的近似累计曲线)
+        label: '本月累计度数 (kWh)',
+        unit: 'kWh',
+        color: '#c77dff',
+        fillColor: 'rgba(199,125,255,0.10)',
+        extract: null,  // 用 monthly_baseline + 今日累计
+      },
+    };
+    let activeKpi = localStorage.getItem('power-active-kpi') || 'power';
+    // 本月起已累计度数(用于 kwh_cum series)
+    let monthlyBaselineKwh = 0;
+    // 缓存最近一次 refresh 拉到的原始 samples,用于 KPI 切换时立即重绘
+    let lastSamples = [];
+    // 原始 samples 总数(用于 chart-meta 显示)
+    let lastSamplesTotal = 0;
 
     // ============ Charts Init ============
     function initCharts() {
@@ -321,13 +385,16 @@
         document.getElementById('kpi-bias').textContent = summary.system_bias_w.toFixed(1);
         document.getElementById('updated-at').textContent = summary.updated_at;
 
-        // Realtime chart (下采样到 ~150 点)
+        // Realtime chart (下采样到 ~150 点) — series 取决于当前选中的 KPI
         const stride = Math.max(1, Math.floor(samples.length / 150));
         const sub = samples.filter((_, i) => i % stride === 0);
-        chartRealtime.data.labels = sub.map(s => s.ts.slice(11));
-        chartRealtime.data.datasets[0].data = sub.map(s => s.total_w);
-        chartRealtime.update('none');
-        document.getElementById('chart-meta-1').textContent = `${samples.length} 个点`;
+        lastSamples = sub;
+        lastSamplesTotal = samples.length;
+        // 本月起累计度数 = 本月估算 - 今日累计
+        monthlyBaselineKwh = Math.max(0, summary.month.kwh_est - summary.today.kwh);
+        renderRealtimeChart(sub);
+        document.getElementById('chart-meta-1').textContent =
+          `${samples.length} 个点 · ${KPI_META[activeKpi].label}`;
 
         // Hourly
         const hours = Array.from({length:24}, (_,i) => String(i).padStart(2,'0'));
@@ -375,6 +442,86 @@
       }
     }
 
+    // ============ Realtime chart render (per KPI) ============
+    function renderRealtimeChart(samples) {
+      const meta = KPI_META[activeKpi];
+      let data;
+      if (activeKpi === 'power') {
+        data = samples.map(s => s.total_w);
+      } else if (activeKpi === 'kwh_today') {
+        // 梯形积分:相邻两点中点 × 间隔(秒) / 3600 / 1000 → kWh
+        let running = 0;
+        data = samples.map((s, i) => {
+          if (i === 0) return 0;
+          const dt = (new Date(samples[i].ts) - new Date(samples[i-1].ts)) / 1000;
+          const p = (s.total_w + samples[i-1].total_w) / 2;
+          running += p * dt / 3600 / 1000;
+          return +running.toFixed(4);
+        });
+      } else if (activeKpi === 'avg_w') {
+        // 5 点滑动平均(对称窗)
+        const W = 5;
+        data = samples.map((_, i) => {
+          const lo = Math.max(0, i - Math.floor(W/2));
+          const hi = Math.min(samples.length, i + Math.ceil(W/2));
+          const slice = samples.slice(lo, hi);
+          const avg = slice.reduce((a, x) => a + x.total_w, 0) / slice.length;
+          return +avg.toFixed(2);
+        });
+      } else if (activeKpi === 'kwh_cum') {
+        // 本月累计 = monthlyBaselineKwh + samples 当日累计
+        let running = 0;
+        data = samples.map((s, i) => {
+          if (i === 0) return +(monthlyBaselineKwh + 0).toFixed(4);
+          const dt = (new Date(samples[i].ts) - new Date(samples[i-1].ts)) / 1000;
+          const p = (s.total_w + samples[i-1].total_w) / 2;
+          running += p * dt / 3600 / 1000;
+          return +(monthlyBaselineKwh + running).toFixed(4);
+        });
+      }
+      const ds = chartRealtime.data.datasets[0];
+      ds.label = meta.label;
+      ds.data = data;
+      ds.borderColor = meta.color;
+      ds.backgroundColor = meta.fillColor;
+      chartRealtime.data.labels = samples.map(s => s.ts.slice(11));
+      // Y 轴单位
+      chartRealtime.options.scales.y.title.text = meta.unit;
+      chartRealtime.update('none');
+    }
+
+    // ============ KPI click → switch series ============
+    function selectKpi(kpiId) {
+      const card = document.querySelector(`[data-kpi="${kpiId}"]`);
+      if (!card) return;
+      if (card.classList.contains('disabled')) {
+        showToast('该指标暂无时间序列曲线');
+        return;
+      }
+      document.querySelectorAll('.kpi').forEach(el => el.classList.remove('selected'));
+      card.classList.add('selected');
+      activeKpi = kpiId;
+      localStorage.setItem('power-active-kpi', activeKpi);
+      // 用缓存的原始 samples 立即重绘;若还没有,触发 refresh
+      if (lastSamples.length > 0) {
+        renderRealtimeChart(lastSamples);
+        document.getElementById('chart-meta-1').textContent =
+          `${lastSamplesTotal} 个点 · ${KPI_META[activeKpi].label}`;
+      } else {
+        refresh();
+      }
+    }
+
+    // ============ Toast ============
+    let toastTimer;
+    function showToast(msg) {
+      const el = document.getElementById('toast');
+      el.textContent = msg;
+      el.classList.add('show');
+      clearTimeout(toastTimer);
+      toastTimer = setTimeout(() => el.classList.remove('show'), 2200);
+    }
+
     // ============ Boot ============
     document.addEventListener('DOMContentLoaded', () => {
       initCharts();
@@ -385,6 +532,29 @@
         refresh();
       });
       document.getElementById('refresh').addEventListener('click', refresh);
+
+      // KPI 卡 click + keyboard(Enter/Space)交互
+      document.querySelectorAll('.kpi[data-kpi]').forEach(card => {
+        const handler = () => selectKpi(card.dataset.kpi);
+        card.addEventListener('click', handler);
+        card.addEventListener('keydown', e => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            handler();
+          }
+        });
+      });
+      // 还原上次选中的 KPI(只更新视觉,refresh 后会被 renderRealtimeChart 重绘)
+      if (activeKpi && activeKpi !== 'power') {
+        const target = document.querySelector(`[data-kpi="${activeKpi}"]`);
+        if (target && !target.classList.contains('disabled')) {
+          document.querySelectorAll('.kpi').forEach(el => el.classList.remove('selected'));
+          target.classList.add('selected');
+        } else {
+          activeKpi = 'power';  // 失效的 localStorage 值,回退
+        }
+      }
+
       refresh();
       // 每 60s 自动刷新
       setInterval(refresh, 60000);
