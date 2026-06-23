@@ -4,10 +4,24 @@
 
 [English](./README.md) | [在线演示](https://hubianluanma.com/power/) | [博客文章](https://blog.hubianluanma.com/posts/mac-power-monitor/)
 
+## 截图
+
+**主仪表盘** — KPI、24h 实时曲线、按小时分布、近 7 日趋势:
+
 <div align="center">
-  <a href="https://hubianluanma.com/power/">
-    <img src="https://minio-api.hubianluanma.com/typora/2026/06/22/9b430c99-6c8d-4001-8cf1-fc4b14a04159.png" alt="Mac 功耗监测面板" width="900">
-  </a>
+  <img src="./docs/screenshots/dashboard.png" alt="主仪表盘" width="900">
+</div>
+
+**KPI 卡片可点击交互** — 点 4 张高亮卡片切换实时曲线显示的指标(整机功耗/今日累计度数/5 点滑动平均/本月累计度数)。另外 2 张无时间序列的卡片点击会弹 toast:
+
+<div align="center">
+  <img src="./docs/screenshots/kpi-click.gif" alt="KPI 卡片点击交互" width="900">
+</div>
+
+**阶梯电价拆解** — 按本年度累计用电自动落到对应档位(北京/上海/广州/深圳):
+
+<div align="center">
+  <img src="./docs/screenshots/tier-pricing.png" alt="阶梯电价拆解" width="900">
 </div>
 
 ## 特性

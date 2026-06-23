@@ -24,6 +24,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 - 移除 KPI 卡片硬编码的 `.primary` 高亮,改为由 JS 注入 `.selected` class。
 - 实时曲线渲染逻辑抽离到 `renderRealtimeChart(samples)`,支持按 KPI 切换数据序列。
+- README 中英双版本加 3 张截图(主仪表盘 + KPI 交互 GIF + 阶梯电价表),替换原 MinIO 单图。
+- 新增 GitHub Social Preview 图(`docs/screenshots/social-preview.png`,1280×640)。
+- 新增 GitHub Topics (`mac`, `apple-silicon`, `power-consumption`, `dashboard`, `flask`, `chartjs`, `home-automation`) 和仓库描述(用户手动设置)。
 
 ## [1.0.0] - 2026-06-22
 

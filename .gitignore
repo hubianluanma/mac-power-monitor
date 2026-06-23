@@ -1,24 +1,15 @@
+# 不要把截图 GIF/PNG 排进 lint check —— 它们是 release asset
+# 但截图本身就是 release asset,要 commit
+
+# Editor / OS
+.DS_Store
+*.swp
+*.swo
+
 # Python
 __pycache__/
-*.py[cod]
-*.so
-.Python
-*.egg-info/
-
-# 数据目录（个人能耗数据，不要 commit）
-data/
-logs/
-
-# 虚拟环境
+*.pyc
 venv/
 .venv/
 
-# IDE
-.vscode/
-.idea/
-*.swp
-.DS_Store
-
-# 测试
-.pytest_cache/
-htmlcov/
+# Project:data,logs 已存在

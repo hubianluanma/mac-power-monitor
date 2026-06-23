@@ -6,10 +6,24 @@
 
 [中文文档](./README.zh.md) | [Live demo](https://hubianluanma.com/power/) | [Blog post](https://blog.hubianluanma.com/posts/mac-power-monitor/)
 
+## Screenshots
+
+**Main dashboard** — KPIs, 24h realtime curve, hourly distribution, 7-day trend:
+
 <div align="center">
-  <a href="https://hubianluanma.com/power/">
-    <img src="https://minio-api.hubianluanma.com/typora/2026/06/22/9b430c99-6c8d-4001-8cf1-fc4b14a04159.png" alt="Mac Power Monitor dashboard" width="900">
-  </a>
+  <img src="./docs/screenshots/dashboard.png" alt="Main dashboard" width="900">
+</div>
+
+**KPI cards are clickable** — click any of the 4 highlighted cards to switch the realtime chart series (current power, today's cumulative kWh, 5-point moving average, monthly cumulative kWh). The other 2 cards (no time-series) show a toast on click:
+
+<div align="center">
+  <img src="./docs/screenshots/kpi-click.gif" alt="KPI click interaction" width="900">
+</div>
+
+**Tiered electricity pricing breakdown** — annual cumulative kWh maps to the appropriate tier automatically (Beijing/Shanghai/Guangzhou/Shenzhen):
+
+<div align="center">
+  <img src="./docs/screenshots/tier-pricing.png" alt="Tiered pricing breakdown" width="900">
 </div>
 
 ## Features
