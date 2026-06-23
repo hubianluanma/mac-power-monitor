@@ -6,6 +6,12 @@
 
 [中文文档](./README.zh.md) | [Live demo](https://hubianluanma.com/power/) | [Blog post](https://blog.hubianluanma.com/posts/mac-power-monitor/)
 
+<div align="center">
+  <a href="https://hubianluanma.com/power/">
+    <img src="https://minio-api.hubianluanma.com/typora/2026/06/22/9b430c99-6c8d-4001-8cf1-fc4b14a04159.png" alt="Mac Power Monitor dashboard" width="900">
+  </a>
+</div>
+
 ## Features
 
 - ⚡ **Real-time sampling** — `powermetrics` every 60s, parses CPU/GPU/ANE power
@@ -14,10 +20,6 @@
 - 🌐 **External access** — Optional nginx reverse proxy + Cloudflare Tunnel setup
 - 📦 **Single binary** — No database server, just SQLite; no build step
 - 🪶 **Lightweight** — ~800 lines of Python + HTML combined
-
-## Screenshots
-
-> _Coming soon — see live demo at https://hubianluanma.com/power/_
 
 ## Quick Start
 

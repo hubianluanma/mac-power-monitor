@@ -4,6 +4,12 @@
 
 [English](./README.md) | [在线演示](https://hubianluanma.com/power/) | [博客文章](https://blog.hubianluanma.com/posts/mac-power-monitor/)
 
+<div align="center">
+  <a href="https://hubianluanma.com/power/">
+    <img src="https://minio-api.hubianluanma.com/typora/2026/06/22/9b430c99-6c8d-4001-8cf1-fc4b14a04159.png" alt="Mac 功耗监测面板" width="900">
+  </a>
+</div>
+
 ## 特性
 
 - ⚡ **实时采样** —— 每分钟调一次 `powermetrics`，解析 CPU/GPU/ANE 三段功耗
